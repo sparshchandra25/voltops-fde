@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOLTOPS // 3D BMS DIAGNOSTIC & STATUTORY RAG WORKSTATION</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #06080d;
+    --panel: rgba(11, 15, 24, 0.92);
+    --panel-solid: #0b0f18;
+    --panel-alt: #101624;
+    --border: #1e293b;
+    --border-bright: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --cyan: #06b6d4;
+    --sky: #38bdf8;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --green: #10b981;
+    --display: 'Chakra Petch', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    line-height: 1.4;
+    overflow-x: hidden;
+    min-height: 100vh;
+    user-select: none;
+  }
+
+  /* Full-Viewport 3D Three.js Background Canvas */
+  #webglMount {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    cursor: crosshair;
+  }
+
+  /* UI Overlay Container */
+  .ui-layer {
+    position: relative;
+    z-index: 10;
+    pointer-events: none;
+    padding: 10px 14px 190px;
+  }
+  .interactive {
+    pointer-events: auto;
+  }
+
+  /* Top Hardware Status Bar */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 9px 16px;
+    margin-bottom: 8px;
+    font-family: var(--mono);
+  }
+  .sys-title {
+    font-family: var(--display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .status-dot {
+    width: 9px;
+    height: 9px;
+    background: var(--green);
+    display: inline-block;
+  }
+  .status-dot.fault { background: var(--red); }
+
+  .view-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .tab-btn {
+    background: #070a10;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.15s ease;
+  }
+  .tab-btn:hover { color: var(--text); border-color: var(--border-bright); }
+  .tab-btn.active {
+    background: var(--cyan);
+    color: #020617;
+    border-color: var(--cyan);
+  }
+
+  .top-telemetry-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .top-telemetry-strip span b { color: var(--text); }
+
+  /* 6-Column KPI Readout Strip */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .kpi-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-lbl {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+  .kpi-val {
+    font-size: 19px;
+    font-weight: 700;
+    margin-top: 3px;
+    color: #f8fafc;
+  }
+  .kpi-sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* 3D Bay Target Probe Badge */
+  .bay-probe-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    width: 310px;
+    font-family: var(--mono);
+    margin-bottom: 10px;
+  }
+
+  /* Main Workstation 3-Column Grid (Toggleable over 3D scene) */
+  .workstation-grid {
+    display: grid;
+    grid-template-columns: 330px 1fr 410px;
+    gap: 10px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .workstation-grid.hidden-bay {
+    display: none;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-header {
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 7px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #cbd5e1;
+  }
+  .panel-body { padding: 11px; }
+
+  /* Col 1: Cell Matrix Grid + CAN Frame Log */
+  .cell-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .cell-node {
+    background: #06080d;
+    border: 1px solid var(--border);
+    padding: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .cell-node:hover { border-color: var(--cyan); }
+  .cell-node.selected { outline: 1px solid var(--cyan); }
+  .cell-node.fault {
+    border-color: var(--red);
+    background: rgba(239, 68, 68, 0.16);
+  }
+  .cell-node.warn {
+    border-color: var(--amber);
+    background: rgba(245, 158, 11, 0.1);
+  }
+  .cell-id {
+    font-size: 9.5px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  .cell-v {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .cell-node.fault .cell-v { color: #fca5a5; }
+
+  .can-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .can-table th, .can-table td {
+    text-align: left;
+    padding: 4.5px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .can-table th { color: var(--muted); font-weight: 500; }
+
+  /* Col 2: Oscilloscope Canvases */
+  canvas.scope {
+    width: 100%;
+    background: #05070b;
+    border: 1px solid var(--border);
+    display: block;
+    cursor: crosshair;
+  }
+  .fault-strip {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    margin-bottom: 9px;
+    background: #06080d;
+  }
+
+  /* Col 3: Statutory Work Order + Hybrid RAG Table */
+  .sop-block {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: #06080d;
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    margin-bottom: 7px;
+    color: #e2e8f0;
+    line-height: 1.45;
+  }
+  .rag-row {
+    background: #06080d;
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    margin-bottom: 6px;
+  }
+  .rag-head {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--cyan);
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  .rag-body {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.38;
+  }
+
+  /* Unified Collapsible Bottom Control Dock */
+  .bottom-dock-wrap {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(1260px, 96vw);
+    z-index: 30;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .bottom-dock-wrap.collapsed {
+    transform: translate(-50%, calc(100% - 28px));
+  }
+  .dock-handle-row {
+    display: flex;
+    justify-content: center;
+  }
+  .dock-toggle-btn {
+    background: var(--panel-solid);
+    color: var(--text);
+    border: 1px solid var(--border-bright);
+    border-bottom: none;
+    padding: 4px 16px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+  .dock-toggle-btn:hover { color: var(--cyan); }
+
+  .dock-body {
+    background: var(--panel);
+    border: 1px solid var(--border-bright);
+    padding: 10px 12px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  }
+  .dock-cam-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .cam-pill-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .cam-btn {
+    background: #06080d;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 9px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+  .cam-btn.active {
+    background: var(--cyan);
+    color: #020617;
+    border-color: var(--cyan);
+    font-weight: 600;
+  }
+
+  .control-bar {
+    display: grid;
+    grid-template-columns: 1.3fr 1.3fr 0.95fr 0.95fr 1.1fr auto;
+    gap: 8px;
+  }
+  .ctrl-group label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+    letter-spacing: 0.04em;
+  }
+  select, input[type="text"] {
+    width: 100%;
+    background: #06080d;
+    color: var(--text);
+    border: 1px solid var(--border-bright);
+    padding: 5px 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    outline: none;
+  }
+  select:focus, input[type="text"]:focus { border-color: var(--cyan); }
+  .btn-exec {
+    background: var(--cyan);
+    color: #020617;
+    border: 1px solid var(--cyan);
+    padding: 0 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    height: 27px;
+    align-self: end;
+  }
+  .btn-exec:hover { background: var(--sky); }
+
+  @media (max-width: 1180px) {
+    .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+    .workstation-grid { grid-template-columns: 1fr; }
+    .control-bar { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+  <!-- Full-Viewport Three.js 3D EV Diagnostic Bay & Highway Tunnel -->
+  <div id="webglMount"></div>
+
+  <div class="ui-layer">
+    <!-- Top Hardware Bar -->
+    <header class="topbar interactive">
+      <div class="sys-title">
+        <span id="sysDot" class="status-dot"></span>
+        <span>VOLTOPS // 3D BMS DIAGNOSTIC &amp; STATUTORY RAG WORKSTATION</span>
+      </div>
+
+      <div class="view-tabs">
+        <button id="tabWorkstation" class="tab-btn active" onclick="window.setUiMode('workstation')">HUD + 3D Bay</button>
+        <button id="tabPure3D" class="tab-btn" onclick="window.setUiMode('pure3d')">Full 3D Bay Inspector</button>
+        <button class="tab-btn" onclick="window.summonVehicleArrival()">Summon Vehicle Arrival</button>
+      </div>
+
+      <div class="top-telemetry-strip">
+        <span>BUS: <b>CAN_FD_500K</b></span>
+        <span>GUARDRAIL: <b>O(1)_MONOTONIC_DEQUE</b></span>
+        <span>ML: <b>LIGHTGBM_NASA</b></span>
+        <span id="envStrip">ENV: <b>LOADING...</b></span>
+      </div>
+    </header>
+
+    <!-- 6-Column Technical Readout Strip -->
+    <section class="kpi-strip interactive">
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>STATE_OF_HEALTH</span><span>[CAPACITY]</span></div>
+        <div class="kpi-val" id="kSoh">--%</div>
+        <div class="kpi-sub" id="kCap">-- Ah / 2.000 Ah</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>LIGHTGBM_RUL</span><span>[PREDICTED]</span></div>
+        <div class="kpi-val" id="kRul">-- CYC</div>
+        <div class="kpi-sub" id="kStatus">STATUS: --</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>PEAK_ROLLING_dV</span><span>[25.0s WIN]</span></div>
+        <div class="kpi-val" id="kDeltaV">-- V</div>
+        <div class="kpi-sub" id="kDeltaLimit">CUTOFF: -- V</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>PACK_TERMINAL_V</span><span>[NOMINAL]</span></div>
+        <div class="kpi-val" id="kPackV">-- V</div>
+        <div class="kpi-sub" id="kSeries">SERIES: --</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>PEAK_CELL_TEMP</span><span>[THERMAL]</span></div>
+        <div class="kpi-val" id="kTemp">-- C</div>
+        <div class="kpi-sub" id="kRisk">RUNAWAY_RISK: --%</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-lbl"><span>INTERNAL_RES_PROXY</span><span>[OHMIC_dV/dI]</span></div>
+        <div class="kpi-val" id="kIr">-- Ohm</div>
+        <div class="kpi-sub" id="kDur">CYCLE_TIME: -- s</div>
+      </div>
+    </section>
+
+    <!-- Floating 3D Cell Probe Card (Shown in Pure 3D Bay Mode) -->
+    <div id="bayProbeCard" class="bay-probe-card interactive" style="display:none;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);">
+        <span>3D SKATEBOARD PACK PROBE</span>
+        <span id="probeState" style="color:var(--red);">FAULT ISOLATED</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px;">
+        <span id="probeCellId" style="font-size:16px;font-weight:700;">MODULE C04</span>
+        <span id="probeCellV" style="font-size:15px;font-weight:700;color:var(--cyan);">-- V</span>
+      </div>
+      <div id="probeCellTemp" style="font-size:10.5px;color:var(--muted);margin-top:3px;">
+        Temp: -- C · Click any 3D cell module in the chassis
+      </div>
+    </div>
+
+    <!-- 3-Column Engineering Workstation Overlay -->
+    <main id="workstationGrid" class="workstation-grid interactive">
+      <!-- Column 1: Cell Module Topology Matrix + Live CAN Frames -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>CELL_GROUP_TOPOLOGY_MATRIX (C01-C16)</span>
+          <span id="matrixTag">BALANCE: ACTIVE</span>
+        </div>
+        <div class="panel-body">
+          <div class="cell-grid" id="cellMatrixGrid"></div>
+
+          <div class="panel-header" style="margin: 8px -11px 8px; border-top: 1px solid var(--border);">
+            <span>RAW_OBD_II // CAN_BUS_FRAME_BUFFER</span>
+            <span>500 kbps</span>
+          </div>
+          <table class="can-table">
+            <thead>
+              <tr><th>TIME(s)</th><th>CAN_ID</th><th>V_CELL</th><th>I_LOAD</th><th>dV_WIN</th><th>STATE</th></tr>
+            </thead>
+            <tbody id="canTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Column 2: Dual Oscilloscope Telemetry Plots -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>OSCILLOSCOPE_CH1 // CELL_VOLTAGE (CYAN) &amp; THERMAL_TRACE (AMBER)</span>
+          <span id="scopeStats">-- SAMPLES</span>
+        </div>
+        <div class="panel-body">
+          <div id="faultBanner" class="fault-strip"></div>
+          <canvas id="voltageCanvas" class="scope" width="760" height="210"></canvas>
+
+          <div class="panel-header" style="margin: 10px -11px 8px; border-top: 1px solid var(--border);">
+            <span>OSCILLOSCOPE_CH2 // O(1) MONOTONIC DEQUE ROLLING dV vs. STATUTORY LIMIT</span>
+            <span id="cutoffLabel" style="color:var(--red);">LIMIT: -- V</span>
+          </div>
+          <canvas id="deltaCanvas" class="scope" width="760" height="140"></canvas>
+        </div>
+      </div>
+
+      <!-- Column 3: Stage 04/05 Statutory Work Order & Hybrid RAG -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>STAGE_04_05 // STATUTORY_SOP &amp; SAFETY_GATE</span>
+          <span id="gateStatus" style="color:var(--green);">GATE: PASS (0.98)</span>
+        </div>
+        <div class="panel-body">
+          <div id="sopContainer"></div>
+
+          <div class="panel-header" style="margin: 10px -11px 8px; border-top: 1px solid var(--border);">
+            <span>HYBRID_RAG_INDEX // BM25 + SVD_COSINE (RRF)</span>
+            <span>CORPUS: NHTSA + MoRTH</span>
+          </div>
+          <div id="ragContainer"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Unified Collapsible Bottom Control Dock -->
+  <div id="bottomDock" class="bottom-dock-wrap interactive">
+    <div class="dock-handle-row">
+      <button id="dockToggleBtn" class="dock-toggle-btn" onclick="window.toggleBottomDock()">
+        ▾ Hide Controls — Zen 3D Bay View (Key: H)
+      </button>
+    </div>
+    <div class="dock-body">
+      <div class="dock-cam-strip">
+        <div class="cam-pill-group">
+          <span style="color:var(--muted);margin-right:4px;">3D CAMERA:</span>
+          <button class="cam-btn active" data-cam="arrival" onclick="window.setCameraPreset('arrival', this)">Bay Arrival</button>
+          <button class="cam-btn" data-cam="xray_iso" onclick="window.setCameraPreset('xray_iso', this)">X-Ray Pack Iso</button>
+          <button class="cam-btn" data-cam="cell_macro" onclick="window.setCameraPreset('cell_macro', this)">Cell C04 Macro</button>
+          <button class="cam-btn" data-cam="chase" onclick="window.setCameraPreset('chase', this)">Highway Chase</button>
+          <button class="cam-btn" data-cam="orbit" onclick="window.setCameraPreset('orbit', this)">Free Orbit</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label style="color:var(--muted);">
+            CHASSIS X-RAY LIFT: <b id="xrayValLabel" style="color:var(--cyan);">55%</b>
+          </label>
+          <input id="xraySlider" type="range" min="0" max="1" step="0.02" value="0.55" style="width:110px;accent-color:var(--cyan);cursor:pointer;" oninput="window.setExplodedFactor(this.value)" />
+          <button id="laserToggleBtn" class="cam-btn active" onclick="window.toggleLaserGantry()">Laser Gantry: ON</button>
+        </div>
+      </div>
+
+      <!-- 5 Core Pipeline Parameters -->
+      <section class="control-bar">
+        <div class="ctrl-group">
+          <label>01 // ARCHITECTURE PROFILE</label>
+          <select id="vehicleMode" onchange="window.runPipeline(true)">
+            <option value="4W_TATA_LFP">4W_LFP // TATA NEXON EV (320V / 100S / AIS-038)</option>
+            <option value="2W_OLA_NMC">2W_NMC // OLA S1 PRO (51.1V / 14S / AIS-156)</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>02 // REGIONAL OPERATING ZONE (OPEN-METEO)</label>
+          <select id="citySelect" onchange="window.runPipeline(false)">
+            __HUB_OPTIONS__
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>03 // NASA AMES PCoE CELL LOG</label>
+          <select id="batteryId" onchange="window.runPipeline(true)">
+            <option value="B0006">B0006.mat (SEVERE_SAG_SPECIMEN)</option>
+            <option value="B0005">B0005.mat (NOMINAL_AGING_BASELINE)</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>04 // DISCHARGE CYCLE</label>
+          <select id="cycleNum" onchange="window.runPipeline(false)">
+            <option value="118">CYCLE_118 (EOL_FAULT_TRIGGER)</option>
+            <option value="150">CYCLE_150 (DEEP_CAPACITY_LOSS)</option>
+            <option value="1">CYCLE_001 (FRESH_CELL_BASELINE)</option>
+            <option value="10">CYCLE_010 (EARLY_STABLE_LOAD)</option>
+            <option value="100">CYCLE_100 (MID_LIFE_DEGRADATION)</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>05 // MANUAL DTC / QUERY OVERRIDE</label>
+          <input type="text" id="customQuery" placeholder="e.g. P0AA6 isolation IPX7..." onkeydown="if(event.key==='Enter')window.runPipeline(false)" />
+        </div>
+        <button class="btn-exec" onclick="window.runPipeline(true)">EXEC_DIAG</button>
+      </section>
+    </div>
+  </div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const state = {
+  vehicleMode: '4W_TATA_LFP',
+  cellMatrix: [],
+  faultEvent: null,
+  sohPct: 100,
+  selectedCellId: 'C04',
+  explodedFactor: 0.55,
+  cameraPreset: 'arrival',
+  scannerActive: true,
+  userControllingCamera: false,
+  vehicleZ: -32.0,
+  pitchAngle: 0.0,
+  currentExploded: 0.55,
+  scanZ: -2.6,
+  scanDir: 1,
+  presetTransitionActive: true,
+};
+
+const container = document.getElementById('webglMount');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06080d);
+scene.fog = new THREE.FogExp2(0x06080d, 0.022);
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+pmremGenerator.dispose();
+
+const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 160);
+camera.position.set(5.6, 2.8, 6.6);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxPolarAngle = Math.PI * 0.485;
+controls.minDistance = 2.4;
+controls.maxDistance = 24.0;
+controls.target.set(0, 0.7, 0);
+
+controls.addEventListener('start', () => {
+  state.userControllingCamera = true;
+  state.presetTransitionActive = false;
+});
+controls.addEventListener('end', () => {
+  state.userControllingCamera = false;
+});
+
+scene.add(new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.85));
+const keyLight = new THREE.DirectionalLight(0xfff7ed, 2.4);
+keyLight.position.set(7, 12, 8);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+scene.add(keyLight);
+
+const rimLight = new THREE.DirectionalLight(0x06b6d4, 1.6);
+rimLight.position.set(-8, 6, -10);
+scene.add(rimLight);
+
+function createBayFloorTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 1024;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#06080d';
+  ctx.fillRect(0, 0, 1024, 1024);
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 1024; i += 64) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
+  }
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 3;
+  for (let i = 0; i <= 1024; i += 256) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(10, 18);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+
+const floorTex = createBayFloorTexture();
+const floorMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(50, 90),
+  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.35, metalness: 0.45 })
+);
+floorMesh.rotation.x = -Math.PI / 2;
+floorMesh.receiveShadow = true;
+scene.add(floorMesh);
+
+const laneMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.45 });
+const leftLane = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 70), laneMat);
+leftLane.rotation.x = -Math.PI / 2;
+leftLane.position.set(-1.65, 0.015, -18);
+scene.add(leftLane);
+
+const rightLane = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 70), laneMat);
+rightLane.rotation.x = -Math.PI / 2;
+rightLane.position.set(1.65, 0.015, -18);
+scene.add(rightLane);
+
+const archGroup = new THREE.Group();
+const pillarGeo = new THREE.BoxGeometry(0.18, 4.2, 0.28);
+const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.25 });
+const neonGeo = new THREE.BoxGeometry(0.05, 3.8, 0.08);
+const neonMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9 });
+for (let i = 0; i < 8; i++) {
+  const zPos = -32 + i * 5.5;
+  const lp = new THREE.Mesh(pillarGeo, pillarMat); lp.position.set(-4.2, 2.1, zPos);
+  const rp = new THREE.Mesh(pillarGeo, pillarMat); rp.position.set(4.2, 2.1, zPos);
+  const tb = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.22, 0.28), pillarMat); tb.position.set(0, 4.2, zPos);
+  const ln = new THREE.Mesh(neonGeo, neonMat); ln.position.set(-4.08, 2.1, zPos);
+  const rn = new THREE.Mesh(neonGeo, neonMat); rn.position.set(4.08, 2.1, zPos);
+  archGroup.add(lp, rp, tb, ln, rn);
+}
+scene.add(archGroup);
+
+const bayRingMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, side: THREE.DoubleSide, transparent: true, opacity: 0.65 });
+const bayRing = new THREE.Mesh(new THREE.RingGeometry(2.75, 2.9, 64), bayRingMat);
+bayRing.rotation.x = -Math.PI / 2;
+bayRing.position.y = 0.02;
+scene.add(bayRing);
+
+const scannerGantry = new THREE.Group();
+const gantryFrameMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.2 });
+const gantryLaserMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.85 });
+const gantryPlaneMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false });
+const gL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.5, 0.16), gantryFrameMat); gL.position.set(-2.1, 1.25, 0);
+const gR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.5, 0.16), gantryFrameMat); gR.position.set(2.1, 1.25, 0);
+const gT = new THREE.Mesh(new THREE.BoxGeometry(4.32, 0.12, 0.16), gantryFrameMat); gT.position.set(0, 2.5, 0);
+const gBar = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.035, 0.04), gantryLaserMat); gBar.position.set(0, 2.42, 0);
+const gSheet = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 2.4), gantryPlaneMat); gSheet.position.set(0, 1.2, 0);
+scannerGantry.add(gL, gR, gT, gBar, gSheet);
+scene.add(scannerGantry);
+
+const vehicleRoot = new THREE.Group();
+scene.add(vehicleRoot);
+
+const packGroup = new THREE.Group();
+packGroup.position.y = 0.34;
+vehicleRoot.add(packGroup);
+
+const trayMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.62, 0.14, 2.95),
+  new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.3 })
+);
+packGroup.add(trayMesh);
+
+const hvBusbar = new THREE.Mesh(
+  new THREE.BoxGeometry(0.06, 0.17, 2.75),
+  new THREE.MeshStandardMaterial({ color: 0xf97316, metalness: 0.4, roughness: 0.35, emissive: 0x431407 })
+);
+hvBusbar.position.set(0, 0.04, 0);
+packGroup.add(hvBusbar);
+
+const cellMeshes = [];
+const cellMaterials = [];
+const cellGeo = new THREE.BoxGeometry(0.32, 0.18, 0.56);
+for (let idx = 0; idx < 16; idx++) {
+  const col = idx % 4;
+  const row = Math.floor(idx / 4);
+  const xOffset = (col - 1.5) * 0.36 + (col >= 2 ? 0.04 : -0.04);
+  const zOffset = (row - 1.5) * 0.65;
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x06b6d4,
+    emissive: 0x034454,
+    emissiveIntensity: 0.8,
+    metalness: 0.55,
+    roughness: 0.25,
+  });
+  const mesh = new THREE.Mesh(cellGeo, mat);
+  mesh.position.set(xOffset, 0.11, zOffset);
+  mesh.userData = { cellId: `C${String(idx + 1).padStart(2, '0')}`, index: idx };
+  packGroup.add(mesh);
+  cellMeshes.push(mesh);
+  cellMaterials.push(mat);
+}
+
+const beaconGroup = new THREE.Group();
+const beaconRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.24, 0.29, 32),
+  new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+);
+beaconRing.rotation.x = -Math.PI / 2;
+beaconRing.position.y = 0.24;
+const beaconBeam = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.02, 0.18, 1.4, 16, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
+);
+beaconBeam.position.y = 0.92;
+beaconGroup.add(beaconRing, beaconBeam);
+packGroup.add(beaconGroup);
+
+const car4WGroup = new THREE.Group();
+vehicleRoot.add(car4WGroup);
+const carUpperShell = new THREE.Group();
+car4WGroup.add(carUpperShell);
+
+const suvShape = new THREE.Shape();
+suvShape.moveTo(-2.15, 0.38);
+suvShape.lineTo(2.15, 0.38);
+suvShape.lineTo(2.22, 0.78);
+suvShape.lineTo(1.35, 0.98);
+suvShape.lineTo(0.55, 1.52);
+suvShape.lineTo(-1.15, 1.48);
+suvShape.lineTo(-1.95, 1.02);
+suvShape.lineTo(-2.18, 0.65);
+suvShape.closePath();
+
+const bodyGeo = new THREE.ExtrudeGeometry(suvShape, {
+  steps: 1, depth: 1.72, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.08, bevelSegments: 3
+});
+bodyGeo.center();
+bodyGeo.rotateY(-Math.PI / 2);
+
+const carPaintMat = new THREE.MeshPhysicalMaterial({
+  color: 0x0f172a, metalness: 0.85, roughness: 0.18, clearcoat: 1.0, clearcoatRoughness: 0.08, transparent: true, opacity: 0.88
+});
+const bodyMesh = new THREE.Mesh(bodyGeo, carPaintMat);
+bodyMesh.position.set(0, 0.92, 0);
+carUpperShell.add(bodyMesh);
+
+const wireframeMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true, transparent: true, opacity: 0.16, depthWrite: false });
+const bodyWireMesh = new THREE.Mesh(bodyGeo, wireframeMat);
+bodyWireMesh.position.copy(bodyMesh.position);
+bodyWireMesh.scale.setScalar(1.003);
+carUpperShell.add(bodyWireMesh);
+
+const drlMesh = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.055, 0.08), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+drlMesh.position.set(0, 0.82, 2.21);
+carUpperShell.add(drlMesh);
+
+const tailMesh = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.06, 0.08), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+tailMesh.position.set(0, 0.94, -2.18);
+carUpperShell.add(tailMesh);
+
+const wheels4W = [];
+const tireGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.26, 28); tireGeo.rotateZ(Math.PI / 2);
+const tireMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.85, metalness: 0.1 });
+const rimGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.27, 16); rimGeo.rotateZ(Math.PI / 2);
+const rimMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.2, metalness: 0.9 });
+const spokeGeo = new THREE.BoxGeometry(0.28, 0.46, 0.05);
+
+for (const [wx, wy, wz] of [[-0.92, 0.38, 1.38], [0.92, 0.38, 1.38], [-0.92, 0.38, -1.38], [0.92, 0.38, -1.38]]) {
+  const wg = new THREE.Group();
+  wg.position.set(wx, wy, wz);
+  const s1 = new THREE.Mesh(spokeGeo, rimMat);
+  const s2 = new THREE.Mesh(spokeGeo, rimMat); s2.rotation.x = Math.PI / 2;
+  wg.add(new THREE.Mesh(tireGeo, tireMat), new THREE.Mesh(rimGeo, rimMat), s1, s2);
+  car4WGroup.add(wg);
+  wheels4W.push(wg);
+}
+
+const scooter2WGroup = new THREE.Group();
+scooter2WGroup.visible = false;
+vehicleRoot.add(scooter2WGroup);
+const scooterUpperShell = new THREE.Group();
+scooter2WGroup.add(scooterUpperShell);
+
+const apronGeo = new THREE.CylinderGeometry(0.18, 0.28, 1.15, 20); apronGeo.rotateX(0.24);
+const apronMesh = new THREE.Mesh(apronGeo, carPaintMat); apronMesh.position.set(0, 0.95, 0.85);
+const headlampMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.18), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+headlampMesh.position.set(0, 1.42, 1.02);
+const handlebarMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.82, 12), rimMat);
+handlebarMesh.rotation.z = Math.PI / 2; handlebarMesh.position.set(0, 1.46, 0.92);
+const saddleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 1.15), carPaintMat);
+saddleMesh.position.set(0, 0.82, -0.45);
+scooterUpperShell.add(apronMesh, headlampMesh, handlebarMesh, saddleMesh);
+
+const wheels2W = [];
+const sTireGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.16, 24); sTireGeo.rotateZ(Math.PI / 2);
+for (const wz of [0.98, -0.95]) {
+  const swg = new THREE.Group();
+  swg.position.set(0, 0.28, wz);
+  swg.add(new THREE.Mesh(sTireGeo, tireMat), new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.38, 0.05), rimMat));
+  scooter2WGroup.add(swg);
+  wheels2W.push(swg);
+}
+
+const raycaster = new THREE.Raycaster();
+const pointerNdc = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointerNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointerNdc, camera);
+  const hits = raycaster.intersectObjects(cellMeshes, false);
+  if (hits.length > 0 && hits[0].object.userData.cellId) {
+    window.selectCellNode(hits[0].object.userData.cellId);
+  }
+});
+
+const clock = new THREE.Clock();
+const targetCamPos = new THREE.Vector3();
+const targetLookAt = new THREE.Vector3();
+const currentLookAt = new THREE.Vector3(0, 0.7, 0);
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = clock.getElapsedTime();
+
+  const is2W = state.vehicleMode.includes('2W');
+  car4WGroup.visible = !is2W;
+  scooter2WGroup.visible = is2W;
+  packGroup.scale.set(is2W ? 0.55 : 1.0, 1.0, is2W ? 0.65 : 1.0);
+
+  const prevZ = state.vehicleZ;
+  state.vehicleZ = THREE.MathUtils.damp(state.vehicleZ, 0.0, 2.6, dt);
+  const dz = state.vehicleZ - prevZ;
+  const speed = Math.abs(dz) / Math.max(0.001, dt);
+  state.pitchAngle = THREE.MathUtils.damp(state.pitchAngle, speed > 0.8 ? 0.022 : 0.0, 5.0, dt);
+
+  vehicleRoot.position.z = state.vehicleZ;
+  vehicleRoot.rotation.x = state.pitchAngle;
+
+  const wheelSpin = dz * 2.8 + dt * 1.4;
+  wheels4W.forEach(w => { w.rotation.x += wheelSpin; });
+  wheels2W.forEach(w => { w.rotation.x += wheelSpin; });
+  floorTex.offset.y -= dt * (0.18 + speed * 0.08);
+
+  state.currentExploded = THREE.MathUtils.damp(state.currentExploded, state.explodedFactor, 4.5, dt);
+  const liftY = state.currentExploded * 1.25;
+  carUpperShell.position.y = liftY;
+  scooterUpperShell.position.y = liftY;
+  carPaintMat.opacity = THREE.MathUtils.lerp(0.92, 0.18, state.currentExploded);
+  wireframeMat.opacity = THREE.MathUtils.lerp(0.12, 0.42, state.currentExploded);
+
+  if (state.scannerActive) {
+    scannerGantry.visible = true;
+    state.scanZ += state.scanDir * dt * 1.65;
+    if (state.scanZ > 2.6) { state.scanZ = 2.6; state.scanDir = -1; }
+    else if (state.scanZ < -2.6) { state.scanZ = -2.6; state.scanDir = 1; }
+    scannerGantry.position.z = state.scanZ;
+  } else {
+    scannerGantry.visible = false;
+  }
+
+  let beaconTargetMesh = null;
+  const hasFault = Boolean(state.faultEvent) || state.sohPct < 72.0;
+  gantryLaserMat.color.setHex(hasFault ? 0xef4444 : 0x06b6d4);
+  gantryPlaneMat.color.setHex(hasFault ? 0xef4444 : 0x06b6d4);
+  bayRingMat.color.setHex(hasFault ? 0xef4444 : 0x06b6d4);
+
+  for (let i = 0; i < 16; i++) {
+    const node = state.cellMatrix[i];
+    const mesh = cellMeshes[i];
+    const mat = cellMaterials[i];
+    if (!node) continue;
+    if (node.status === 'FAULT') {
+      mat.color.setHex(0xef4444);
+      mat.emissive.setHex(0x991111);
+      mat.emissiveIntensity = 1.1 + 0.4 * Math.sin(elapsed * 6.0);
+      mesh.position.y = 0.16;
+      if (!beaconTargetMesh) beaconTargetMesh = mesh;
+    } else if (node.status === 'WARN') {
+      mat.color.setHex(0xf59e0b);
+      mat.emissive.setHex(0x6b3c04);
+      mat.emissiveIntensity = 0.75;
+      mesh.position.y = 0.11;
+    } else {
+      mat.color.setHex(0x06b6d4);
+      mat.emissive.setHex(0x034454);
+      mat.emissiveIntensity = 0.65;
+      mesh.position.y = 0.11;
+    }
+    if (state.selectedCellId === node.cell_id) {
+      beaconTargetMesh = mesh;
+      mesh.position.y = 0.19;
+    }
+  }
+
+  if (beaconTargetMesh) {
+    beaconGroup.visible = true;
+    beaconGroup.position.x = THREE.MathUtils.damp(beaconGroup.position.x, beaconTargetMesh.position.x, 8, dt);
+    beaconGroup.position.z = THREE.MathUtils.damp(beaconGroup.position.z, beaconTargetMesh.position.z, 8, dt);
+  }
+
+  if (!state.userControllingCamera && state.presetTransitionActive && state.cameraPreset !== 'orbit') {
+    if (state.cameraPreset === 'arrival') {
+      targetCamPos.set(5.2, 2.4, 6.2);
+      targetLookAt.set(0, 0.65, state.vehicleZ * 0.35);
+    } else if (state.cameraPreset === 'xray_iso') {
+      targetCamPos.set(3.8, 3.6, 3.8);
+      targetLookAt.set(0, 0.55, 0);
+    } else if (state.cameraPreset === 'cell_macro') {
+      const tc = beaconTargetMesh || cellMeshes[3];
+      targetCamPos.set(tc.position.x + 1.45, 1.65, tc.position.z + 1.65);
+      targetLookAt.set(tc.position.x, 0.45, tc.position.z);
+    } else if (state.cameraPreset === 'chase') {
+      targetCamPos.set(0.0, 2.15, state.vehicleZ - 5.8);
+      targetLookAt.set(0, 0.75, state.vehicleZ + 2.0);
+    }
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamPos.x, 3.2, dt);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamPos.y, 3.2, dt);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamPos.z, 3.2, dt);
+    currentLookAt.x = THREE.MathUtils.damp(currentLookAt.x, targetLookAt.x, 4.0, dt);
+    currentLookAt.y = THREE.MathUtils.damp(currentLookAt.y, targetLookAt.y, 4.0, dt);
+    currentLookAt.z = THREE.MathUtils.damp(currentLookAt.z, targetLookAt.z, 4.0, dt);
+    controls.target.copy(currentLookAt);
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+window.summonVehicleArrival = function() {
+  state.vehicleZ = -32.0;
+  state.pitchAngle = -0.025;
+  state.presetTransitionActive = true;
+};
+
+window.setUiMode = function(mode) {
+  const grid = document.getElementById('workstationGrid');
+  const probe = document.getElementById('bayProbeCard');
+  document.getElementById('tabWorkstation').classList.toggle('active', mode === 'workstation');
+  document.getElementById('tabPure3D').classList.toggle('active', mode === 'pure3d');
+  if (mode === 'pure3d') {
+    grid.classList.add('hidden-bay');
+    probe.style.display = 'block';
+  } else {
+    grid.classList.remove('hidden-bay');
+    probe.style.display = 'none';
+  }
+};
+
+window.setCameraPreset = function(preset, btnEl) {
+  state.cameraPreset = preset;
+  state.presetTransitionActive = true;
+  document.querySelectorAll('.cam-btn[data-cam]').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+};
+
+window.setExplodedFactor = function(val) {
+  state.explodedFactor = parseFloat(val);
+  document.getElementById('xrayValLabel').innerText = Math.round(state.explodedFactor * 100) + '%';
+};
+
+window.toggleLaserGantry = function() {
+  state.scannerActive = !state.scannerActive;
+  const btn = document.getElementById('laserToggleBtn');
+  btn.innerText = 'Laser Gantry: ' + (state.scannerActive ? 'ON' : 'OFF');
+  btn.classList.toggle('active', state.scannerActive);
+};
+
+window.toggleBottomDock = function() {
+  const dock = document.getElementById('bottomDock');
+  const collapsed = dock.classList.toggle('collapsed');
+  document.getElementById('dockToggleBtn').innerText = collapsed
+    ? '▴ Show Telemetry & 3D Bay Controls (Key: H)'
+    : '▾ Hide Controls — Zen 3D Bay View (Key: H)';
+};
+
+window.addEventListener('keydown', (e) => {
+  if ((e.key === 'h' || e.key === 'H') && document.activeElement.tagName !== 'INPUT') {
+    window.toggleBottomDock();
+  }
+});
+
+window.selectCellNode = function(cellId) {
+  state.selectedCellId = cellId;
+  state.cameraPreset = 'cell_macro';
+  state.presetTransitionActive = true;
+  updateSelectedCellProbe();
+  renderCellGrid();
+};
+
+function updateSelectedCellProbe() {
+  const cell = state.cellMatrix.find(c => c.cell_id === state.selectedCellId) || state.cellMatrix[3];
+  if (!cell) return;
+  document.getElementById('probeCellId').innerText = 'MODULE ' + cell.cell_id;
+  document.getElementById('probeCellV').innerText = cell.v.toFixed(4) + ' V';
+  document.getElementById('probeCellTemp').innerText = `Temp: ${cell.t} C · Click any 3D cell module in the chassis`;
+  const stEl = document.getElementById('probeState');
+  stEl.innerText = cell.status === 'FAULT' ? 'FAULT ISOLATED' : (cell.status === 'WARN' ? 'DEGRADED' : 'BALANCED');
+  stEl.style.color = cell.status === 'FAULT' ? '#ef4444' : (cell.status === 'WARN' ? '#f59e0b' : '#10b981');
+}
+
+function renderCellGrid() {
+  const isFault = Boolean(state.faultEvent) || state.sohPct < 72.0;
+  document.getElementById('matrixTag').innerText = isFault ? 'IMBALANCE_DETECTED' : 'BALANCE: OK';
+  document.getElementById('matrixTag').style.color = isFault ? '#ef4444' : '#10b981';
+  document.getElementById('cellMatrixGrid').innerHTML = state.cellMatrix.map(c => `
+    <div onclick="window.selectCellNode('${c.cell_id}')" class="cell-node ${c.status === 'FAULT' ? 'fault' : (c.status === 'WARN' ? 'warn' : '')} ${state.selectedCellId === c.cell_id ? 'selected' : ''}">
+      <div class="cell-id"><span>${c.cell_id}</span><span>${c.t}C</span></div>
+      <div class="cell-v">${c.v.toFixed(3)}V</div>
+    </div>
+  `).join('');
+}
+
+window.runPipeline = async function(reSummon = false) {
+  const mode = document.getElementById('vehicleMode').value;
+  const city = encodeURIComponent(document.getElementById('citySelect').value);
+  const bat = document.getElementById('batteryId').value;
+  const cyc = document.getElementById('cycleNum').value;
+  const q = encodeURIComponent(document.getElementById('customQuery').value);
+
+  state.vehicleMode = mode;
+  if (reSummon) window.summonVehicleArrival();
+
+  const res = await fetch(`/api/diagnose?vehicle_mode=${mode}&battery_id=${bat}&cycle_num=${cyc}&city=${city}&custom_query=${q}`);
+  const data = await res.json();
+
+  const f = data.dsa_fault_event;
+  const ml = data.ml_predictions;
+  const w = data.weather_info;
+  const prof = data.vehicle_profile;
+  const isFault = Boolean(f) || ml.soh_pct < 72.0;
+
+  state.cellMatrix = data.cell_matrix;
+  state.faultEvent = f;
+  state.sohPct = ml.soh_pct;
+
+  document.getElementById('sysDot').className = isFault ? 'status-dot fault' : 'status-dot';
+  document.getElementById('envStrip').innerHTML = `ENV: <b>${w.state.toUpperCase()} (${w.temp_c}C / ${w.humidity_pct}% RH)</b>`;
+
+  const kSoh = document.getElementById('kSoh');
+  kSoh.innerText = ml.soh_pct.toFixed(1) + '%';
+  kSoh.style.color = ml.soh_pct < 72 ? '#ef4444' : '#10b981';
+  document.getElementById('kCap').innerText = `${ml.capacity_ah} Ah / 2.000 Ah`;
+
+  document.getElementById('kRul').innerText = `${ml.rul_cycles} CYC`;
+  document.getElementById('kStatus').innerText = `STATUS: ${ml.health_status}`;
+
+  const kDV = document.getElementById('kDeltaV');
+  kDV.innerText = `${ml.max_delta_v.toFixed(4)} V`;
+  kDV.style.color = f ? '#ef4444' : '#06b6d4';
+  document.getElementById('kDeltaLimit').innerText = `CUTOFF: ${prof.delta_v_crit} V`;
+
+  const packV = data.telemetry_stream.length ? data.telemetry_stream[0].pack_voltage_v : 0;
+  document.getElementById('kPackV').innerText = `${packV} V`;
+  document.getElementById('kSeries').innerText = `SERIES: ${prof.series_cells}S`;
+
+  document.getElementById('kTemp').innerText = `${ml.max_cell_temp_c} C`;
+  document.getElementById('kRisk').innerText = `RUNAWAY_RISK: ${ml.thermal_risk_pct}%`;
+
+  document.getElementById('kIr').innerText = `${ml.ir_ohm} Ohm`;
+  document.getElementById('kDur').innerText = `CYCLE_TIME: ${ml.duration_s} s`;
+
+  renderCellGrid();
+  updateSelectedCellProbe();
+
+  const pts = data.telemetry_stream;
+  const faultFrames = pts.filter(p => p.fault).slice(0, 4);
+  const sampleFrames = faultFrames.length
+    ? [...pts.slice(0, 3), ...faultFrames, ...pts.slice(-2)]
+    : pts.filter((_, idx) => idx % Math.max(1, Math.floor(pts.length / 8)) === 0).slice(0, 9);
+
+  document.getElementById('canTableBody').innerHTML = sampleFrames.map(p => `
+    <tr style="${p.fault ? 'color:#fca5a5;background:rgba(239,68,68,0.14);' : ''}">
+      <td>${p.time_s.toFixed(1)}</td>
+      <td>0x7E4</td>
+      <td>${p.voltage_v.toFixed(4)}V</td>
+      <td>${p.current_a.toFixed(2)}A</td>
+      <td>${p.delta_v.toFixed(4)}V</td>
+      <td>${p.fault ? 'TRIP' : 'OK'}</td>
+    </tr>
+  `).join('');
+
+  const banner = document.getElementById('faultBanner');
+  if (f) {
+    banner.style.borderColor = '#ef4444';
+    banner.style.color = '#fca5a5';
+    banner.innerText = `[DSA_TRIP @ t=${f.time_s}s] DTC: ${f.dtc_code} | CELL_04: ${f.cell_voltage_v}V | dV: ${f.rolling_delta_v}V > ${f.threshold_v}V | LAW: ${f.law_triggered}`;
+  } else {
+    banner.style.borderColor = '#10b981';
+    banner.style.color = '#6ee7b7';
+    banner.innerText = `[DSA_NOMINAL] 0 VOLTAGE SAG EVENTS ACROSS ${pts.length} SAMPLES | PEAK dV: ${ml.max_delta_v}V <= ${prof.delta_v_crit}V`;
+  }
+
+  drawOscilloscopes(pts, prof.delta_v_crit);
+
+  const wo = data.agent_work_order;
+  document.getElementById('sopContainer').innerHTML = wo.sop_steps.map(s => `<div class="sop-block">${s}</div>`).join('');
+  document.getElementById('ragContainer').innerHTML = data.rag_citations.map((r, i) => `
+    <div class="rag-row">
+      <div class="rag-head">
+        <span>#${i+1} ${r.doc_id}</span>
+        <span>RRF:${r.rrf_score} | BM25:${r.bm25_score} | COS:${r.vec_similarity}</span>
+      </div>
+      <div class="rag-body">${r.text.substring(0, 235)}...</div>
+    </div>
+  `).join('');
+};
+
+function drawOscilloscopes(points, limitV) {
+  const vCanvas = document.getElementById('voltageCanvas');
+  const vCtx = vCanvas.getContext('2d');
+  vCtx.clearRect(0, 0, vCanvas.width, vCanvas.height);
+
+  const dCanvas = document.getElementById('deltaCanvas');
+  const dCtx = dCanvas.getContext('2d');
+  dCtx.clearRect(0, 0, dCanvas.width, dCanvas.height);
+
+  if (!points.length) return;
+  document.getElementById('scopeStats').innerText = `${points.length} FRAMES (0s -> ${points[points.length-1].time_s}s)`;
+  document.getElementById('cutoffLabel').innerText = `LIMIT: ${limitV} V`;
+
+  const pad = 28, w = vCanvas.width - pad*2, h = vCanvas.height - pad*2;
+
+  vCtx.strokeStyle = '#161b26';
+  vCtx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const gy = pad + (g / 4) * h;
+    vCtx.beginPath(); vCtx.moveTo(pad, gy); vCtx.lineTo(pad + w, gy); vCtx.stroke();
+  }
+
+  const minV = 2.4, maxV = 4.3, minT = 5, maxT = 65;
+
+  vCtx.beginPath();
+  vCtx.strokeStyle = '#f59e0b';
+  vCtx.lineWidth = 1.5;
+  points.forEach((p, i) => {
+    const x = pad + (i / (points.length - 1)) * w;
+    const y = pad + h - ((p.temp_c - minT) / (maxT - minT)) * h;
+    i === 0 ? vCtx.moveTo(x, y) : vCtx.lineTo(x, y);
+  });
+  vCtx.stroke();
+
+  vCtx.beginPath();
+  vCtx.strokeStyle = '#06b6d4';
+  vCtx.lineWidth = 2;
+  points.forEach((p, i) => {
+    const x = pad + (i / (points.length - 1)) * w;
+    const y = pad + h - ((p.voltage_v - minV) / (maxV - minV)) * h;
+    i === 0 ? vCtx.moveTo(x, y) : vCtx.lineTo(x, y);
+  });
+  vCtx.stroke();
+
+  points.forEach((p, i) => {
+    if (p.fault) {
+      const x = pad + (i / (points.length - 1)) * w;
+      const y = pad + h - ((p.voltage_v - minV) / (maxV - minV)) * h;
+      vCtx.fillStyle = '#ef4444';
+      vCtx.fillRect(x - 3, y - 3, 6, 6);
+    }
+  });
+
+  const dh = dCanvas.height - pad*1.4;
+  const maxDV = Math.max(0.42, limitV * 1.6);
+  const limitY = 12 + dh - (limitV / maxDV) * dh;
+
+  dCtx.beginPath();
+  dCtx.setLineDash([4, 4]);
+  dCtx.strokeStyle = '#ef4444';
+  dCtx.moveTo(pad, limitY);
+  dCtx.lineTo(pad + w, limitY);
+  dCtx.stroke();
+  dCtx.setLineDash([]);
+
+  dCtx.beginPath();
+  dCtx.strokeStyle = '#3b82f6';
+  dCtx.lineWidth = 1.8;
+  points.forEach((p, i) => {
+    const x = pad + (i / (points.length - 1)) * w;
+    const clampedDV = Math.min(maxDV, p.delta_v);
+    const y = 12 + dh - (clampedDV / maxDV) * dh;
+    i === 0 ? dCtx.moveTo(x, y) : dCtx.lineTo(x, y);
+  });
+  dCtx.stroke();
+}
+
+window.runPipeline(true);
+</script>
+</body>
+</html>
