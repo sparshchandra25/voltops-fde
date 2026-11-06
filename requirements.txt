@@ -4,3 +4,4 @@ uvicorn
 pandas
 numpy
 requests
+scipy
