@@ -1,8 +1,9 @@
-
 fastapi
 uvicorn
-pandas
 numpy
-requests
+pandas
 scipy
-lightgbm
+scikit-learn
+requests
+pypdf
+rank-bm25
